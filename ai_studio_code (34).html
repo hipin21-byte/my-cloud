@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KCI 학술정보 & 과제 목차 AI 비서</title>
+  <!-- Tailwind CSS CDN 로드 (디자인용) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 폰트 적용 (Pretendard) -->
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <style>
+    body { font-family: "Pretendard", sans-serif; }
+    .loader {
+      border-top-color: #3b82f6;
+      animation: spinner 1s linear infinite;
+    }
+    @keyframes spinner {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <div class="max-w-4xl mx-auto px-4 py-10">
+    
+    <!-- 헤더 -->
+    <header class="text-center mb-8">
+      <div class="inline-block bg-blue-100 text-blue-700 text-sm font-semibold px-3 py-1 rounded-full mb-3">
+        KCI OpenAPI + Generative AI
+      </div>
+      <h1 class="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+        📚 학술자료 추천 & 과제 목차 생성기
+      </h1>
+      <p class="text-slate-500 mt-2">
+        수업 주제와 과제를 입력하면 관련 KCI 논문을 찾고 보고서 목차를 기획해 드립니다.
+      </p>
+    </header>
+
+    <!-- 입력 폼 카드 -->
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
+      <form id="agentForm" onsubmit="handleGenerate(event)">
+        
+        <!-- 수업 주제 입력 -->
+        <div class="mb-4">
+          <label class="block text-sm font-bold text-slate-700 mb-1" for="courseTopic">
+            📌 수강 중인 수업 / 주차별 학습 주제
+          </label>
+          <input 
+            type="text" 
+            id="courseTopic" 
+            placeholder="예: 경영정보시스템 - 생성형 AI 도입과 데이터 보안 거버넌스" 
+            required
+            class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition"
+          >
+        </div>
+
+        <!-- 과제 주제 입력 -->
+        <div class="mb-5">
+          <label class="block text-sm font-bold text-slate-700 mb-1" for="assignmentTopic">
+            📝 작성해야 할 과제 주제 및 연구 목적
+          </label>
+          <textarea 
+            id="assignmentTopic" 
+            rows="3" 
+            placeholder="예: 금융권 LLM(생성형 AI) 도입 시 발생할 수 있는 개인정보 유출 위협과 이를 방지하기 위한 보안 체계 제안" 
+            required
+            class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition"
+          ></textarea>
+        </div>
+
+        <!-- 고급 설정 (Google Apps Script URL 연동) -->
+        <details class="mb-5 text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200">
+          <summary class="cursor-pointer font-medium text-slate-700 select-none">⚙️ API 연동 설정 (선택사항)</summary>
+          <div class="mt-3">
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Google Apps Script Web App URL</label>
+            <input 
+              type="url" 
+              id="gasUrl" 
+              placeholder="https://script.google.com/macros/s/배포ID/exec"
+              class="w-full px-3 py-1.5 rounded border border-slate-300 text-xs focus:ring-1 focus:ring-blue-500"
+            >
+            <p class="text-xs text-slate-400 mt-1">* URL을 비워두면 <b>샘플 데모 모드</b>로 동작합니다.</p>
+          </div>
+        </details>
+
+        <!-- 제출 버튼 -->
+        <button 
+          type="submit" 
+          id="submitBtn"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow transition duration-150 flex items-center justify-center space-x-2"
+        >
+          <span>🔍 KCI 논문 검색 및 목차 생성하기</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- 로딩 스피너 (기본 숨김) -->
+    <div id="loadingSection" class="hidden text-center py-12">
+      <div class="loader ease-linear rounded-full border-4 border-t-4 border-slate-200 h-10 w-10 mx-auto mb-3"></div>
+      <p class="text-slate-600 font-medium">KCI 국내 학술 논문을 검색하고 목차를 기획하고 있습니다...</p>
+    </div>
+
+    <!-- 결과 영역 (기본 숨김) -->
+    <div id="resultSection" class="hidden space-y-6">
+      
+      <!-- 1. 과제 목차 및 기획안 카드 -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div class="flex items-center space-x-2 mb-4 pb-3 border-b border-slate-100">
+          <span class="text-xl">📋</span>
+          <h2 class="text-lg font-bold text-slate-800">과제 기획안 및 추천 목차</h2>
+        </div>
+        <div id="outlineContent" class="prose prose-slate max-w-none text-sm text-slate-700 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-100 font-mono">
+          <!-- AI 생성 결과가 여기에 들어갑니다 -->
+        </div>
+      </div>
+
+      <!-- 2. KCI 참고 논문 리스트 카드 -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div class="flex items-center space-x-2 mb-4 pb-3 border-b border-slate-100">
+          <span class="text-xl">📑</span>
+          <h2 class="text-lg font-bold text-slate-800">추천 KCI 등재 학술논문</h2>
+        </div>
+        <div id="papersList" class="space-y-3">
+          <!-- 논문 리스트 아이템이 동적으로 들어갑니다 -->
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    async function handleGenerate(e) {
+      e.preventDefault();
+      
+      const course = document.getElementById('courseTopic').value.trim();
+      const assignment = document.getElementById('assignmentTopic').value.trim();
+      const gasUrl = document.getElementById('gasUrl').value.trim();
+      
+      const submitBtn = document.getElementById('submitBtn');
+      const loadingSection = document.getElementById('loadingSection');
+      const resultSection = document.getElementById('resultSection');
+
+      // 로딩 UI 활성화
+      submitBtn.disabled = true;
+      submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      loadingSection.classList.remove('hidden');
+      resultSection.classList.add('hidden');
+
+      try {
+        let resultData;
+
+        if (gasUrl) {
+          // 1. Google Apps Script Web App으로 실제 요청 전송
+          const response = await fetch(`${gasUrl}?course=${encodeURIComponent(course)}&assignment=${encodeURIComponent(assignment)}`);
+          resultData = await response.json();
+        } else {
+          // 2. GAS URL이 없는 경우: 1.5초 후 샘플 목업 데이터 렌더링
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          resultData = generateMockData(course, assignment);
+        }
+
+        // 결과 화면 표시
+        renderResults(resultData);
+        resultSection.classList.remove('hidden');
+
+      } catch (err) {
+        alert("데이터를 가져오는 중 오류가 발생했습니다: " + err.message);
+      } finally {
+        // 로딩 UI 복구
+        submitBtn.disabled = false;
+        submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        loadingSection.classList.add('hidden');
+      }
+    }
+
+    // 결과 렌더링 함수
+    function renderResults(data) {
+      // 목차 영역
+      document.getElementById('outlineContent').textContent = data.outline;
+
+      // 논문 목록 영역
+      const papersContainer = document.getElementById('papersList');
+      papersContainer.innerHTML = '';
+
+      data.papers.forEach((paper, idx) => {
+        const item = document.createElement('div');
+        item.className = "p-4 rounded-xl border border-slate-200 hover:border-blue-400 bg-white hover:bg-blue-50/30 transition";
+        item.innerHTML = `
+          <div class="flex justify-between items-start gap-2">
+            <h4 class="font-bold text-slate-800 text-sm">
+              <span class="text-blue-600 mr-1">[논문 ${idx + 1}]</span>${paper.title}
+            </h4>
+            <a href="${paper.url}" target="_blank" class="shrink-0 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 font-semibold px-2.5 py-1 rounded-md border border-blue-200">
+              KCI 원문 ↗
+            </a>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            👤 ${paper.author} | 🏢 ${paper.journal} (${paper.year})
+          </p>
+          <p class="text-xs text-slate-600 mt-2 bg-slate-50 p-2 rounded line-clamp-2">
+            <span class="font-semibold text-slate-700">초록 요약:</span> ${paper.abstract}
+          </p>
+        `;
+        papersContainer.appendChild(item);
+      });
+    }
+
+    // 데모용 목업 데이터 생성기
+    function generateMockData(course, assignment) {
+      return {
+        outline: `[과제 목차 기획안]
+주제: ${assignment} (연계 과목: ${course})
+
+I. 서론
+  1. 연구 및 과제의 배경: 생성형 AI 도입에 따른 금융권 패러다임 변화
+  2. 문제 제기: 대규모 언어 모델(LLM) 환경에서의 개인정보 유출 취약점
+  3. 과제 작성 목적 및 기대효과
+
+II. 이론적 배경 및 선행연구 검토
+  1. 금융 도메인에서의 LLM 도입 동향 및 적용 사례
+  2. 금융 데이터 보안 규제(신용정보법, 개인정보보호법) 기준 분석 ── [논문 1] 인용
+  3. LLM 데이터 전처리 및 프롬프트 인젝션 보안 위협 분석 ── [논문 2] 인용
+
+III. 금융권 LLM 도입을 위한 단계별 보안 거버넌스 프레임워크 제안
+  1. [데이터 구축 단계] 민감 개인정보 비식별화 및 합성데이터 활용 방안
+  2. [모델 학습 및 서빙 단계] 온프레미스/프라이빗 클라우드 기반 격리 환경 설계
+  3. [사후 모니터링 단계] 침해 사고 대응 및 감사 추적 체계 ── [논문 3] 인용
+
+IV. 결론 및 실무적 제언
+  1. 연구 요약 및 시사점
+  2. 금융 보안 정책 개선을 위한 제언 및 한계점`,
+        papers: [
+          {
+            title: "금융 분야 생성형 AI 도입을 위한 개인정보 보호 가이드라인 연구",
+            author: "김한국, 이정보",
+            journal: "한국정보보호학회논문지",
+            year: "2024",
+            abstract: "본 논문은 금융권에서 대형 언어 모델 도입 시 발생할 수 있는 신용정보법 및 개인정보보호법 상의 법적 쟁점을 검토하고...",
+            url: "https://www.kci.go.kr"
+          },
+          {
+            title: "LLM 환경에서의 프롬프트 인젝션 공격 및 데이터 탈취 대응 방안 분석",
+            author: "박보안",
+            journal: "정보처리학회논문지",
+            year: "2023",
+            abstract: "생성형 AI 모델의 구조적 취약점을 이용한 데이터 유출 공격 기법을 분류하고, 이를 방어하기 위한 게이트웨이 보안 메커니즘을...",
+            url: "https://www.kci.go.kr"
+          },
+          {
+            title: "국내외 AI 거버넌스 프레임워크 비교를 통한 금융 데이터 안전 관리 체계",
+            author: "최금융, 정경영",
+            journal: "경영정보학연구",
+            year: "2024",
+            abstract: "EU AI Act 및 국내 인공지능 윤리 가이드라인을 바탕으로 금융 기업이 채택해야 할 리스크 관리 및 모니터링 체계를 제안한다.",
+            url: "https://www.kci.go.kr"
+          }
+        ]
+      };
+    }
+  </script>
+</body>
+</html>
